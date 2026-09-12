@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import nodemailer from "nodemailer";
 import User from "../model/user_model";
+import dotenv from "dotenv";
 
+dotenv.config();
 
 // ==========================================
 // Gmail Transporter
