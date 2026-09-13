@@ -1,21 +1,15 @@
 import { Request, Response } from "express";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import User from "../model/user_model";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 // ==========================================
-// Gmail Transporter
+// Resend
 // ==========================================
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 
 // ==========================================
@@ -27,6 +21,8 @@ export const createMessage = async (
   res: Response
 ) => {
   try {
+    console.log("📩 Received body:", req.body);
+
     const {
       name,
       email,
@@ -60,94 +56,53 @@ export const createMessage = async (
 
     await newMessage.save();
 
+    console.log("✅ Message saved to MongoDB");
+
 
     // ----------------------------------------
-    // Send message to Gmail
+    // Send Email using Resend
     // ----------------------------------------
 
-    await transporter.sendMail({
-      from: process.env.GMAIL_USER,
-      to: process.env.GMAIL_USER,
+    const { data, error } = await resend.emails.send({
+      from: "Portfolio <onboarding@resend.dev>",
 
-      // Clicking Reply in Gmail will reply
-      // directly to the visitor
-      replyTo: email,
+      to: ["knowledge4040god@gmail.com"],
 
-      subject: `📩 Portfolio Contact - ${name}`,
+      replyTo: email.trim().toLowerCase(),
 
-      html: `
-        <div style="
-          font-family: Arial, sans-serif;
-          max-width: 650px;
-          margin: 20px auto;
-          padding: 25px;
-          border: 1px solid #ddd;
-          border-radius: 12px;
-          background: #ffffff;
-          color: #222222;
-        ">
+      subject: `📩 Portfolio Contact - ${name.trim()}`,
 
-          <h2 style="
-            margin-bottom: 20px;
-            color: #2563eb;
-          ">
-            📩 New Portfolio Message
-          </h2>
+      text: `
+New Portfolio Message
 
+Name: ${name.trim()}
+Email: ${email.trim().toLowerCase()}
+Phone: ${phoneNumber?.trim() || "Not provided"}
 
-          <p>
-            <strong>Name:</strong>
-            ${name}
-          </p>
+Message:
+${message.trim()}
 
-
-          <p>
-            <strong>Email:</strong>
-            ${email}
-          </p>
-
-
-          <p>
-            <strong>Phone:</strong>
-            ${phoneNumber || "Not provided"}
-          </p>
-
-
-          <hr style="
-            margin: 20px 0;
-            border: none;
-            border-top: 1px solid #ddd;
-          " />
-
-
-          <h3>Message</h3>
-
-
-          <p style="
-            white-space: pre-line;
-            line-height: 1.6;
-          ">
-            ${message}
-          </p>
-
-
-          <hr style="
-            margin: 20px 0;
-            border: none;
-            border-top: 1px solid #ddd;
-          " />
-
-
-          <p style="
-            font-size: 12px;
-            color: #777;
-          ">
-            This message was sent through your portfolio contact form.
-          </p>
-
-        </div>
+--------------------------------
+This message was sent through your portfolio contact form.
       `,
     });
+
+
+    // ----------------------------------------
+    // Resend Error
+    // ----------------------------------------
+
+    if (error) {
+      console.error("❌ Resend email error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Message saved, but email could not be sent.",
+      });
+    }
+
+
+    console.log("✅ Email sent successfully:", data?.id);
 
 
     // ----------------------------------------
@@ -159,7 +114,7 @@ export const createMessage = async (
       message: "Message sent successfully!",
     });
 
-  } catch (error) {
+  } catch (error: any) {
 
     console.error(
       "❌ Error creating contact message:",
@@ -168,7 +123,9 @@ export const createMessage = async (
 
     return res.status(500).json({
       success: false,
-      message: "Failed to send message. Please try again later.",
+      message:
+        error?.message ||
+        "Failed to send message. Please try again later.",
     });
   }
 };
