@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import crypto from "crypto";
 import Visitor from "../model/visitor_model";
 
 export const trackVisitor = async (
@@ -6,43 +7,56 @@ export const trackVisitor = async (
   res: Response
 ) => {
   try {
-    const { visitorId } = req.body;
+    let visitorId = req.cookies?.visitorId;
+
+    // ----------------------------------------
+    // New visitor
+    // ----------------------------------------
 
     if (!visitorId) {
-      return res.status(400).json({
-        success: false,
-        message: "visitorId is required",
+      visitorId = crypto.randomUUID();
+
+      res.cookie("visitorId", visitorId, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 1000 * 60 * 60 * 24 * 365 * 5,
       });
     }
 
-    // Current date — YYYY-MM-DD
-    const today = new Date().toISOString().split("T")[0];
+    // ----------------------------------------
+    // Check visitor in MongoDB
+    // ----------------------------------------
 
-    // Check if this visitor has already visited today
     const existingVisitor = await Visitor.findOne({
       visitorId,
-      date: today,
     });
 
-    // If not visited today, create a new record
+    // ----------------------------------------
+    // New unique visitor
+    // ----------------------------------------
+
     if (!existingVisitor) {
       await Visitor.create({
         visitorId,
-        date: today,
       });
+
+      console.log("👤 NEW VISITOR:", visitorId);
+    } else {
+      console.log("👀 EXISTING VISITOR:", visitorId);
     }
 
-    // Total unique visitors for today
-    const todayVisitors = await Visitor.countDocuments({
-      date: today,
-    });
+    // ----------------------------------------
+    // Get GLOBAL visitor count
+    // ----------------------------------------
+
+    const totalVisitors = await Visitor.countDocuments();
+
+    console.log("📊 TOTAL VISITORS:", totalVisitors);
 
     return res.status(200).json({
       success: true,
-      message: existingVisitor
-        ? "Visitor already counted today."
-        : "New visitor counted.",
-      todayVisitors,
+      totalVisitors,
     });
 
   } catch (error) {
